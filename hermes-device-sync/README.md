@@ -136,7 +136,8 @@ it. Windows asks for administrator permission once.
 Ask your Hermes: *"I want Hermes to answer even when I have no internet."*
 It checks each device's memory, graphics card and disk first, tells you which model fits, and asks
 before installing anything. Then it installs Ollama (free), downloads a model sized for each device,
-and puts it LAST in your fallback chain. Online nothing changes; the local model only answers when
+and puts it LAST in your fallback chain. Don't use the Ollama app's own "Hermes Agent" option: it
+makes the local model your MAIN model. Online nothing changes; the local model only answers when
 the cloud models can't be reached. It is free but weaker than cloud models.
 
 ## Daily use
@@ -356,6 +357,9 @@ downloads several GB and is much weaker than cloud models, especially with tools
    `setx OLLAMA_CONTEXT_LENGTH 65536`, macOS/Linux export it where the server starts. Start the
    server (`ollama serve`; on Windows the tray app alone may not start the API: run `ollama.exe serve`
    hidden). Check: `curl http://localhost:11434/api/version`.
+   Do NOT use the Ollama app's "launch Hermes Agent" integration: it rewrites config.yaml and makes the
+   local model the PRIMARY one (and limits toolsets). If it happened, restore config.yaml from a backup.
+   Small GPU: `OLLAMA_FLASH_ATTENTION=1` and `OLLAMA_KV_CACHE_TYPE=q4_0` halve the memory of a 64K context.
 5. `ollama pull <model>`, then give it the SAME alias on every device: `ollama cp <model> hermes-local`.
    Each device can use a different model size; the shared chain names only the alias.
 6. Add it LAST in `config.json` `fallback_providers`:
