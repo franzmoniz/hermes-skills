@@ -360,6 +360,10 @@ Only if the user wants it (e.g. "from the laptop at school, do X on my desktop a
   and non-interactive flags.
 - Sync conflicts inside the sync folder are auto-resolved (remote wins; memory is re-merged from the
   device's own copy). Conflicts in other files of a reused repo are reported, never auto-resolved.
+- Google Workspace logins that expire every ~7 days on every device: the user's Google Cloud OAuth app is
+  in "Testing" mode (refresh tokens of test apps expire after 7 days). Fix once, with the user: Google
+  Cloud console > Google Auth Platform > Audience > "Publish app" (personal use needs no verification;
+  Google shows an "unverified app" screen at login, which is expected). Then log in again on each device.
 - Copying `auth.json`/`.env` between devices is NOT supported: OAuth refresh tokens can rotate and
   break both devices. Log in on each device.
 - Phone: works if Hermes runs on it as a normal install (e.g. Termux on Android: `pkg install python git gh`,
