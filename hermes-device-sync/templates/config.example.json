@@ -1,0 +1,14 @@
+{
+  "sessions_branch": "hermes-sessions",
+  "fallback_providers": null,
+  "summary": {
+    "enabled": false,
+    "provider": null,
+    "model": null,
+    "language": "English"
+  },
+  "queue": {
+    "rules": "",
+    "max_hours": 3
+  }
+}
