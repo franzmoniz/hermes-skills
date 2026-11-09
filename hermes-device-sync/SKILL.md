@@ -192,8 +192,14 @@ downloads several GB and is much weaker than cloud models, especially with tools
    `setx OLLAMA_CONTEXT_LENGTH 65536`, macOS/Linux export it where the server starts. Start the
    server (`ollama serve`; on Windows the tray app alone may not start the API: run `ollama.exe serve`
    hidden). Check: `curl http://localhost:11434/api/version`.
-   Do NOT use the Ollama app's "launch Hermes Agent" integration: it rewrites config.yaml and makes the
-   local model the PRIMARY one (and limits toolsets). If it happened, restore config.yaml from a backup.
+   The Ollama app opens a window after install. The FIRST screen is the Ollama account sign-in: let the
+   user sign in and link the account if they want (only needed for Ollama's cloud models; the local
+   model works without it; never choose a paid plan). When the window then shows the "Apps" screen
+   (choose an agent: Claude Code, Hermes Agent, Hermes Desktop...), pick NOTHING: close the app window
+   (Windows: `Stop-Process -Name "ollama app"`; the `ollama serve` you started keeps running) and tell
+   the user to always close it there. Its "Hermes Agent"/"Hermes Desktop" options rewrite config.yaml
+   and make the local model the PRIMARY one (and limit toolsets). If that happened, restore config.yaml
+   from the backup (`config.yaml.bak-*` made before) and re-run setup.py for the hook.
    Small GPU: `OLLAMA_FLASH_ATTENTION=1` and `OLLAMA_KV_CACHE_TYPE=q4_0` halve the memory of a 64K context.
 5. `ollama pull <model>`, then give it the SAME alias on every device: `ollama cp <model> hermes-local`.
    Each device can use a different model size; the shared chain names only the alias.
