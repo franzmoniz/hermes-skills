@@ -60,6 +60,40 @@ def _env_names():
     return sorted(names)
 
 
+def _hermes_pythons():
+    """Python interpreters that can run Hermes skill scripts: the Hermes venv first (it has the Google
+    libraries), then this one. The plain bundled Python lacks them and would report false 'expired'."""
+    import glob
+    cands = []
+    for f in glob.glob(str(HH / "installs" / "*" / "facts.json")):
+        try:
+            env = json.load(open(f, encoding="utf-8"))["packages"]["venv"]["environment"]
+        except Exception:
+            continue
+        for exe in (Path(env) / "Scripts" / "python.exe", Path(env) / "bin" / "python3", Path(env) / "bin" / "python"):
+            if exe.exists():
+                cands.append(str(exe))
+    cands.append(sys.executable)
+    return cands
+
+
+def _google_check(gs, home):
+    """'ok' | 'expired' | '?' (could not run the check: never reported as expired)."""
+    for py in _hermes_pythons():
+        try:
+            r = subprocess.run([py, str(gs), "--check"], capture_output=True, text=True, timeout=60,
+                               env=dict(os.environ, HERMES_HOME=str(home)), stdin=subprocess.DEVNULL,
+                               creationflags=0x08000000 if os.name == "nt" else 0)
+        except Exception:
+            continue
+        first = (r.stdout.strip().splitlines() or [""])[0]
+        if first.startswith("AUTHENTICATED"):
+            return "ok"
+        if re.search(r"TOKEN_REVOKED|invalid_grant|NOT_AUTHENTICATED|expired|revoked", r.stdout + r.stderr, re.I):
+            return "expired"
+    return "?"
+
+
 def _google_accounts():
     """Google Workspace logins (google-workspace skill): {alias: "ok" | "expired" | "missing"}.
     The default account is alias "default"; extra ones live in $HERMES_HOME/google-accounts/<alias>/.
@@ -84,13 +118,8 @@ def _google_accounts():
         if not gsetup:
             acc[alias] = "ok"
             continue
-        try:
-            r = subprocess.run([sys.executable, str(gsetup), "--check"], capture_output=True, text=True,
-                               timeout=60, env=dict(os.environ, HERMES_HOME=str(home)), stdin=subprocess.DEVNULL)
-            first = (r.stdout.strip().splitlines() or [""])[0].strip()
-            acc[alias] = "ok" if first.startswith("AUTHENTICATED") else "expired"
-        except (OSError, subprocess.TimeoutExpired):
-            acc[alias] = "unknown"
+        if True:
+            acc[alias] = _google_check(gsetup, home)
     write_json(cache_f, {"at": time.time(), "acc": acc})
     return acc
 
