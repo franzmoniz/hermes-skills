@@ -78,9 +78,12 @@ def main():
         try:
             pull()
         except RuntimeError as e:
+            if "Could not resolve host" in str(e) or "unable to access" in str(e) or "Could not read from remote" in str(e):
+                return 0  # offline: everything stays in local commits and is pushed on the next online sync
             out(f"pull failed on {device()} (conflict or network): {e}")
             return 1
         import memory_sync, device_check, jobs, handoff, skills_sync
+        step("activity log catch-up", handoff.catchup)  # online again: tidy + recaps left pending offline
         step("memory sync", memory_sync.run)
         step("skills sync", lambda: [out(m) for m in skills_sync.run(
             HH / "skills", data_dir() / "skills", HH / "cache" / "hermes-sync-skills-base.json", device())])

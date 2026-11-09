@@ -51,6 +51,11 @@ def install_data(repo, subdir, update):
         say("created config.json (shared settings; edit it to manage the fallback chain and the recap)")
     if not (data / ".gitignore").exists():
         shutil.copy2(PKG / "templates" / "gitignore", data / ".gitignore")
+    ga = repo / ".gitattributes"
+    rule = f"{subdir}/activity.md merge=union"
+    cur = ga.read_text(encoding="utf-8") if ga.exists() else ""
+    if rule not in cur:  # both devices' new lines are kept instead of a merge conflict; sync tidies them
+        ga.write_text(cur.rstrip("\n") + ("\n" if cur.strip() else "") + rule + "\n", encoding="utf-8")
     for d in ("memory", "devices", "queue", "skills", "shared"):
         (data / d).mkdir(exist_ok=True)
         (data / d / ".gitkeep").touch()

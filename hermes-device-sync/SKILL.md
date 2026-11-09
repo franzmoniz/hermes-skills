@@ -1,7 +1,7 @@
 ---
 name: hermes-device-sync
 description: Link devices into one Hermes (sync, hand-off, queue).
-version: 0.2.0
+version: 0.3.0
 author: Francisco Moniz (franzmoniz), Hermes Agent
 license: MIT
 platforms: [windows, linux, macos]
@@ -192,6 +192,13 @@ Only if the user wants it (e.g. "from the laptop at school, do X on my desktop a
   from any device, and syncs again on exit. `hermes-new` = a fresh Hermes without that.
 
 ## Pitfalls
+- Working offline (no internet): Hermes itself only answers offline with a LOCAL model (e.g. Ollama) in
+  the fallback chain; cloud models need internet. Everything done offline is still kept: the conversation
+  stays in Hermes' local database with the time of every message, the activity line is written at the
+  time the conversation HAPPENED (not when it is synced), and every sync commits locally and quietly
+  skips the push. When the device is online again, the next sync pushes it all, merges the activity
+  logs of both devices without conflicts (git `merge=union` + tidy/sort), and makes the recaps that were
+  left "(recap pending)". Nothing extra to clean up: there is no separate offline folder.
 - Saving happens after EVERY answer (hook `post_llm_call` -> `turn_sync.py`, seconds later); the
   15-min cron job is only a safety net and runs the queue while nobody chats. An answer cut off
   mid-way (terminal closed while it was still writing) is not saved; everything before it is.

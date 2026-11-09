@@ -1,7 +1,7 @@
 # Hermes Device Sync - One Hermes on all your devices
 
 **Author:** Francisco Moniz ([@franzmoniz](https://github.com/franzmoniz))
-**License:** MIT  -  **Version:** 0.2.0
+**License:** MIT  -  **Version:** 0.3.0
 
 ## What it does
 
@@ -23,7 +23,7 @@ phone) so they work as **one Hermes**:
 5. **Share files between devices**: through a cloud drive both are logged in to, or through your
    private repo. Your Hermes can even ask a device that is off to upload a file when it turns on.
 6. **Activity log**: one line per conversation, from every device, so each Hermes knows what was done
-   where.
+   where. Work done offline is kept and lands at the right date when the device is back online.
 7. **Optional remote control**: run things on your home PC from your laptop, at home or anywhere
    through Tailscale.
 
@@ -340,6 +340,13 @@ Only if the user wants it (e.g. "from the laptop at school, do X on my desktop a
   from any device, and syncs again on exit. `hermes-new` = a fresh Hermes without that.
 
 ### Pitfalls
+- Working offline (no internet): Hermes itself only answers offline with a LOCAL model (e.g. Ollama) in
+  the fallback chain; cloud models need internet. Everything done offline is still kept: the conversation
+  stays in Hermes' local database with the time of every message, the activity line is written at the
+  time the conversation HAPPENED (not when it is synced), and every sync commits locally and quietly
+  skips the push. When the device is online again, the next sync pushes it all, merges the activity
+  logs of both devices without conflicts (git `merge=union` + tidy/sort), and makes the recaps that were
+  left "(recap pending)". Nothing extra to clean up: there is no separate offline folder.
 - Saving happens after EVERY answer (hook `post_llm_call` -> `turn_sync.py`, seconds later); the
   15-min cron job is only a safety net and runs the queue while nobody chats. An answer cut off
   mid-way (terminal closed while it was still writing) is not saved; everything before it is.
