@@ -145,8 +145,9 @@ def _apply_fallback(want, have):
     cfg = HH / "config.yaml"
     if cfg.exists():
         shutil.copy2(cfg, cfg.with_name("config.yaml.bak-" + time.strftime("%Y%m%d%H%M")))
+    keep = ("provider", "model", "base_url")  # base_url: local/custom endpoints (e.g. Ollama); never keys
     rc, txt = hermes("config", "set", "fallback_providers",
-                     json.dumps([{"provider": w["provider"], "model": w["model"]} for w in want]))
+                     json.dumps([{k: w[k] for k in keep if w.get(k)} for w in want]))
     if rc:
         out("could not apply the shared fallback chain: " + strip_ansi(txt)[-200:])
         return False
@@ -213,6 +214,26 @@ def _reach():
     }
 
 
+def _check_local_models(want):
+    """Warn if a fallback entry points at a LOCAL endpoint (offline model) that is not ready here."""
+    import urllib.request
+    for w in want or []:
+        url = (w.get("base_url") or "").rstrip("/")
+        if not re.match(r"https?://(localhost|127\.0\.0\.1|\[::1\])[:/]", url + "/"):
+            continue
+        try:
+            with urllib.request.urlopen(url + "/models", timeout=3) as r:
+                ids = [m.get("id", "") for m in json.loads(r.read().decode("utf-8", "replace")).get("data", [])]
+        except Exception:
+            out(f"local model server {url} is not running on {device()}: offline answers won't work "
+                f"(start it, e.g. `ollama serve`, or install it: see 'Optional: answer offline' in SKILL.md)")
+            continue
+        m = w.get("model", "")
+        if m and not any(i == m or i == m + ":latest" for i in ids):
+            out(f"local model '{m}' is missing on {device()} (pull a model and alias it: "
+                f"`ollama pull <model>` then `ollama cp <model> {m}`)")
+
+
 def run():
     me = device()
     cfg = shared_cfg()
@@ -221,6 +242,8 @@ def run():
     if isinstance(want, list) and want and _apply_fallback(want, ai["fallback"]):
         CACHE.unlink(missing_ok=True)
         ai = _collect_ai()
+    if isinstance(want, list):
+        _check_local_models(want)
     access = _collect_access()
     info = {"device": me, **ai, "access": access, **_reach(), "last_seen": time.strftime("%Y-%m-%d")}
     for alias, st in access["google"].items():

@@ -1,7 +1,7 @@
 # Hermes Device Sync - One Hermes on all your devices
 
 **Author:** Francisco Moniz ([@franzmoniz](https://github.com/franzmoniz))
-**License:** MIT  -  **Version:** 0.3.0
+**License:** MIT  -  **Version:** 0.4.0
 
 ## What it does
 
@@ -24,7 +24,10 @@ phone) so they work as **one Hermes**:
    private repo. Your Hermes can even ask a device that is off to upload a file when it turns on.
 6. **Activity log**: one line per conversation, from every device, so each Hermes knows what was done
    where. Work done offline is kept and lands at the right date when the device is back online.
-7. **Optional remote control**: run things on your home PC from your laptop, at home or anywhere
+7. **Works offline too**: without internet you keep working. Everything you do is saved on the device
+   and goes up, at the right date, as soon as it is online again. Optionally, a free local AI model
+   (Ollama) sized to each device answers when there is no internet, set once for all devices.
+8. **Optional remote control**: run things on your home PC from your laptop, at home or anywhere
    through Tailscale.
 
 It works with 2 or more devices and syncs through a private GitHub repository of yours. The sync uses no
@@ -58,6 +61,7 @@ With this installed:
 | A conversation stays on the device where it started | Type `hermes` on any device and the newest conversation from ANY device continues there, with a 3-line recap of where you stopped (the recap is optional) |
 | You don't notice a device missing an AI account or using another model | Every sync compares the devices and tells you exactly what is missing ("Desktop is missing AI accounts that Laptop has: copilot") |
 | You set the fallback models on every device by hand | Change the fallback chain once and every device applies it |
+| No internet = no Hermes, and offline work stays stuck on that device | Offline work is kept and synced later; optionally a local AI model answers offline |
 | A device that is off can't do anything for you | Leave it a request. It runs as soon as that device is switched on, and the result comes back to you |
 | No way to reach your home PC from outside | Optional: control one device from another, at home or anywhere through Tailscale |
 
@@ -71,6 +75,8 @@ and the optional recap) use a model, and you choose which one.
   **private** repository that only you can see.
 - About 10 minutes for the first device and 5 for each extra one.
 - Optional, to control a device from outside your home: a free Tailscale account.
+- Optional, to have answers without internet: free disk space for a local model (2-20 GB per device)
+  and ideally a graphics card (NVIDIA with 4 GB or more works well for small models).
 
 You do NOT need git, the GitHub CLI or any other tools installed beforehand. Your Hermes first checks
 what you already have (tools, GitHub login, repos, Tailscale, AI accounts) and only installs or sets up
@@ -125,6 +131,14 @@ It will help you install Tailscale on both devices (with the same Tailscale acco
 locked-down SSH server on the device you want to control (it only accepts your own devices), and test
 it. Windows asks for administrator permission once.
 
+### Optional: answers without internet (local model)
+
+Ask your Hermes: *"I want Hermes to answer even when I have no internet."*
+It checks each device's memory, graphics card and disk first, tells you which model fits, and asks
+before installing anything. Then it installs Ollama (free), downloads a model sized for each device,
+and puts it LAST in your fallback chain. Online nothing changes; the local model only answers when
+the cloud models can't be reached. It is free but weaker than cloud models.
+
 ## Daily use
 
 - Type `hermes` (no arguments) to open Hermes. It syncs, continues your newest conversation from any
@@ -171,6 +185,8 @@ Your Hermes follows `SKILL.md` step by step. In short:
    each with its own login on this device, until the sync shows no differences.
 10. **Optional remote control:** Tailscale, an SSH server restricted to your devices, and an SSH key
     per device (`scripts/remote.py`).
+11. **Optional offline answers:** checks the hardware, installs Ollama, downloads a model that fits each
+    device under the same name (`hermes-local`) and adds it as the last fallback for all devices.
 
 Rules your Hermes follows (from SKILL.md): it never puts passwords, keys or tokens in the repo; it
 never types your passwords (you log in yourself); it never adds anything paid without asking; it backs
@@ -264,7 +280,8 @@ desktop session, not over SSH) and start it. Done when `hermes cron list` shows 
 after its next run, "Last run: ... ok".
 
 Step 7 - Shared settings (`<clone>/hermes-sync/config.json`, applies to ALL devices):
-- `fallback_providers`: list of `{"provider","model"}` to use when the primary model fails or runs out.
+- `fallback_providers`: list of `{"provider","model"}` to use when the primary model fails or runs out
+  (an entry may also have `"base_url"`, for a local/custom endpoint such as Ollama; never put keys here).
   Build it only from providers the user has (`hermes auth list`) and is happy to use (rule 3). Leave
   `null` to not manage it. When set, every device applies it on its next sync (with a config backup).
 - `summary`: 3-line recap shown above a resumed conversation. Costs a small model call each time the
@@ -319,6 +336,34 @@ Only if the user wants it (e.g. "from the laptop at school, do X on my desktop a
 4. Test from the controller: `remote.py check "<target>"` -> "online via ..."; then
    `echo 'hostname' | python scripts/remote.py run "<target>"`. Done when it prints the target's name.
 
+### Optional: answer offline with a local model (Ollama)
+Without internet every cloud model fails, so Hermes cannot answer at all. Sync already keeps offline
+work (see Pitfalls); this adds a free LOCAL model as the LAST fallback so Hermes still answers offline.
+Online nothing changes: the local model is only used when everything before it fails. Ask first (it
+downloads several GB and is much weaker than cloud models, especially with tools).
+1. Check the hardware of EACH device (read only): RAM, GPU and its VRAM (`nvidia-smi` if present),
+   free disk. Windows: `Get-CimInstance Win32_ComputerSystem, Win32_Processor, Win32_VideoController`
+   and `Get-PSDrive C`. A device that is off or far away: leave it a read-only request (`jobs.py add`).
+2. Pick a model per device by GPU memory (the model must fit in VRAM to be usable): ~4 GB -> a 3-4B
+   model (e.g. `qwen3:4b`); ~8 GB -> `qwen3:8b`, or `qwen3:30b-a3b` (MoE) with 32 GB RAM; no GPU ->
+   a 1-4B model, slow. Prefer models with tool calling. Check free disk (models are 2-20 GB).
+3. Install Ollama only where missing (`ollama --version` first). Windows:
+   `winget install --id Ollama.Ollama -e --silent --accept-package-agreements --accept-source-agreements`
+   (from Hermes' bash add `< /dev/null`, else winget fails with "stdin is not a tty"; binary in
+   `%LOCALAPPDATA%\Programs\Ollama\ollama.exe`). macOS: `brew install ollama`. Linux: the script
+   from ollama.com/download.
+4. Hermes rejects models with less than 64K context, so set it for the server: Windows
+   `setx OLLAMA_CONTEXT_LENGTH 65536`, macOS/Linux export it where the server starts. Start the
+   server (`ollama serve`; on Windows the tray app alone may not start the API: run `ollama.exe serve`
+   hidden). Check: `curl http://localhost:11434/api/version`.
+5. `ollama pull <model>`, then give it the SAME alias on every device: `ollama cp <model> hermes-local`.
+   Each device can use a different model size; the shared chain names only the alias.
+6. Add it LAST in `config.json` `fallback_providers`:
+   `{"provider": "custom", "model": "hermes-local", "base_url": "http://localhost:11434/v1"}` and sync.
+   Every device applies it; a device whose local server or model is missing prints a warning on sync.
+7. Test once with the internet off (or with a wrong primary model in a throwaway session): Hermes
+   should answer through `hermes-local`. Delete test sessions afterwards.
+
 ### Day-to-day commands (run with `terminal`, paths relative to `<clone>/hermes-sync/`)
 - Sync now: `python scripts/sync.py` (the user can type `Sync-Hermes` in PowerShell / `sync-hermes` in bash).
 - Leave work for another device: `python scripts/jobs.py add "<device>" "<self-contained task>"`, then
@@ -341,7 +386,7 @@ Only if the user wants it (e.g. "from the laptop at school, do X on my desktop a
 
 ### Pitfalls
 - Working offline (no internet): Hermes itself only answers offline with a LOCAL model (e.g. Ollama) in
-  the fallback chain; cloud models need internet. Everything done offline is still kept: the conversation
+  the fallback chain (see "Optional: answer offline"); cloud models need internet. Everything done offline is still kept: the conversation
   stays in Hermes' local database with the time of every message, the activity line is written at the
   time the conversation HAPPENED (not when it is synced), and every sync commits locally and quietly
   skips the push. When the device is online again, the next sync pushes it all, merges the activity
@@ -383,6 +428,8 @@ Only if the user wants it (e.g. "from the laptop at school, do X on my desktop a
 - `hermes cron list` shows `hermes-sync` with a recent "ok" run on every device.
 - Hand-off: write one message in `hermes` on device A, exit, open `hermes` on device B: the same
   conversation resumes there.
+- Offline model (if set up): `curl http://localhost:11434/v1/models` lists `hermes-local` on every
+  device, and sync prints no "local model" warning.
 - Queue: `jobs.py add "<B>" "Run hostname and tell me the result"` on A, sync A, sync B, wait ~1 min,
   sync B, sync A: A prints "request to B done" and the result file has B's hostname.
 
@@ -411,6 +458,7 @@ job, and the shortcut in your shell profile.
 
 - Sync, memory merge, device check and conversation hand-off: **zero tokens**.
 - Queued requests: run with your normal Hermes model chain, like any message you send.
+- Local offline model (optional): free, runs on your own device; only disk space and electricity.
 - Recap: one small model call each time you exit Hermes, and **only if you enable it**. Use a free
   model if you want zero cost.
 
@@ -421,6 +469,9 @@ job, and the shortcut in your shell profile.
   `fallback_providers` setting align them.
 - "conversation export failed": a Hermes update probably changed its internal session format. Sync
   keeps working; only the conversation hand-off pauses until the tool is updated.
+- "local model server ... is not running" / "local model ... is missing": the offline model is in your
+  fallback chain but not ready on that device. Start Ollama (`ollama serve`) or pull the model and alias
+  it (`ollama cp <model> hermes-local`).
 - Nothing syncs by itself: check that the Hermes gateway is running and that `hermes cron list` shows
   `hermes-sync`.
 - Windows, `hermes` shortcut not working: the PowerShell execution policy blocks profiles

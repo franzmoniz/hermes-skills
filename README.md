@@ -16,7 +16,7 @@ installing it.
 
 | Skill | What it does | Platforms |
 |---|---|---|
-| [Hermes Device Sync](hermes-device-sync) - *One Hermes on all your devices* | Links your laptop, desktop, server and phone so they work as one Hermes. Memory and skills are shared. The conversation follows you and is saved after every answer. Every device gets the same AI accounts and logins (checked automatically). Plus file sharing, an activity log, a request queue for devices that are off, and optional remote control. | Windows, Linux, macOS |
+| [Hermes Device Sync](hermes-device-sync) - *One Hermes on all your devices* | Links your laptop, desktop, server and phone so they work as one Hermes. Memory and skills are shared. The conversation follows you and is saved after every answer. Every device gets the same AI accounts and logins (checked automatically). Plus file sharing, an activity log, a request queue for devices that are off, offline work (optional local AI model when there is no internet), and optional remote control. | Windows, Linux, macOS |
 | [Hermes Quick Launch](hermes-quick-launch) - *Open Hermes from Win+R* | Press Win+R, type `hermes`, and Hermes opens in Windows Terminal. | Windows |
 
 More skills will be added here over time.
