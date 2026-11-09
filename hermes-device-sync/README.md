@@ -1,7 +1,7 @@
 # Hermes Device Sync - One Hermes on all your devices
 
 **Author:** Francisco Moniz ([@franzmoniz](https://github.com/franzmoniz))
-**License:** MIT  -  **Version:** 0.4.0
+**License:** MIT  -  **Version:** 0.5.0
 
 ## What it does
 
@@ -27,7 +27,10 @@ phone) so they work as **one Hermes**:
 7. **Works offline too**: without internet you keep working. Everything you do is saved on the device
    and goes up, at the right date, as soon as it is online again. Optionally, a free local AI model
    (Ollama) sized to each device answers when there is no internet, set once for all devices.
-8. **Optional remote control**: run things on your home PC from your laptop, at home or anywhere
+8. **Optional: the same password vault everywhere**: save a login in your Hermes vault on one device
+   and every device has it (removing works too). Only an encrypted file goes to your private repo;
+   the key stays on your devices.
+9. **Optional remote control**: run things on your home PC from your laptop, at home or anywhere
    through Tailscale.
 
 It works with 2 or more devices and syncs through a private GitHub repository of yours. The sync uses no
@@ -61,6 +64,7 @@ With this installed:
 | A conversation stays on the device where it started | Type `hermes` on any device and the newest conversation from ANY device continues there, with a 3-line recap of where you stopped (the recap is optional) |
 | You don't notice a device missing an AI account or using another model | Every sync compares the devices and tells you exactly what is missing ("Desktop is missing AI accounts that Laptop has: copilot") |
 | You set the fallback models on every device by hand | Change the fallback chain once and every device applies it |
+| A login saved in the Hermes vault exists only on that device | Optionally the vault is the same on every device (encrypted; the key never leaves your devices) |
 | No internet = no Hermes, and offline work stays stuck on that device | Offline work is kept and synced later; optionally a local AI model answers offline |
 | A device that is off can't do anything for you | Leave it a request. It runs as soon as that device is switched on, and the result comes back to you |
 | No way to reach your home PC from outside | Optional: control one device from another, at home or anywhere through Tailscale |
@@ -131,6 +135,14 @@ It will help you install Tailscale on both devices (with the same Tailscale acco
 locked-down SSH server on the device you want to control (it only accepts your own devices), and test
 it. Windows asks for administrator permission once.
 
+### Optional: the same vault (saved logins) on every device
+
+Ask your Hermes: *"When I save a login in the vault on one device, I want it on the others too."*
+It explains what is shared (only an encrypted file; the key never goes to GitHub), asks you to
+confirm, backs up the vault, turns it on, and copies the key once to your other devices over the
+remote connection (or asks you to copy it by hand). After that, logins you add or remove on any device
+reach all of them.
+
 ### Optional: answers without internet (local model)
 
 Ask your Hermes: *"I want Hermes to answer even when I have no internet."*
@@ -188,7 +200,9 @@ Your Hermes follows `SKILL.md` step by step. In short:
    each with its own login on this device, until the sync shows no differences.
 10. **Optional remote control:** Tailscale, an SSH server restricted to your devices, and an SSH key
     per device (`scripts/remote.py`).
-11. **Optional offline answers:** checks the hardware, installs Ollama, downloads a model that fits each
+11. **Optional vault sync:** with your OK, shares the Hermes vault encrypted (`scripts/vault_sync.py`);
+    the key is copied once per device outside the repo.
+12. **Optional offline answers:** checks the hardware, installs Ollama, downloads a model that fits each
     device under the same name (`hermes-local`) and adds it as the last fallback for all devices.
 
 Rules your Hermes follows (from SKILL.md): it never puts passwords, keys or tokens in the repo; it
@@ -220,7 +234,8 @@ will happen, or do it yourself. "You" below means the Hermes agent; "the user" m
 - `scripts/setup.py` installer for one device (idempotent). `scripts/sync.py` one sync round.
 - `scripts/turn_sync.py` run by the Hermes hook after every answer (background, no windows, no tokens).
 - `scripts/memory_sync.py`, `skills_sync.py`, `device_check.py` (AI setup + logins check), `jobs.py`
-  (queue), `handoff.py` (conversation, recap, activity log), `share.py` (files), `remote.py` (SSH), `common.py`. All stdlib Python; run them with the Python that runs Hermes.
+  (queue), `handoff.py` (conversation, recap, activity log), `share.py` (files), `remote.py` (SSH),
+  `vault_sync.py` (opt-in encrypted vault sync), `common.py`. All stdlib Python; run them with the Python that runs Hermes.
 - `templates/` shell wrappers, `config.example.json`, `windows-ssh-server.ps1`, `gitignore`.
 - `README.md` the human guide (show the user the relevant parts when they ask "what is this?").
 
@@ -291,6 +306,8 @@ Step 7 - Shared settings (`<clone>/hermes-sync/config.json`, applies to ALL devi
   user exits Hermes, so enable it only with a provider the user accepts (a free one if they want zero
   cost). Set `language` to the user's language.
 - `queue.rules`: extra rules for unattended requests (e.g. "never delete files outside ~/projects").
+- `vault_sync`: `true` shares the Hermes credential vault between devices, encrypted (see "Optional:
+  same vault on every device"). Default `false`; only enable it after the user agrees.
 Save, then `python <clone>/hermes-sync/scripts/sync.py`. Done when the sync prints no errors.
 
 Step 7b - Logins and access. The sync compares, by NAME only, everything each device is connected to:
@@ -338,6 +355,28 @@ Only if the user wants it (e.g. "from the laptop at school, do X on my desktop a
    the .ps1 with `-AuthorizeKey`). Sync again so addresses are fresh.
 4. Test from the controller: `remote.py check "<target>"` -> "online via ..."; then
    `echo 'hostname' | python scripts/remote.py run "<target>"`. Done when it prints the target's name.
+
+### Optional: same vault on every device (encrypted)
+Only if the user wants it (e.g. "when I save a login on the laptop, the desktop should have it too").
+The Hermes vault (`hermes vault`, `$HERMES_HOME/vault/`) is `vault.json.enc` (items encrypted with
+Fernet) plus `vault.key`. `scripts/vault_sync.py` puts ONLY the encrypted items in the repo
+(`<data dir>/vault/vault.json.enc`), encrypted with the same key; the key never goes to the repo
+(`templates/gitignore` ignores `*.key`). Explain this to the user and get a clear yes first: the
+encrypted file in a private repo is unreadable without the key, but it is still their credentials.
+1. On the first device: back up `$HERMES_HOME/vault/` (e.g. to `$HERMES_HOME/backups/vault-<date>`),
+   set `"vault_sync": true` in `config.json`, sync. Check `<data dir>/vault/vault.json.enc` and
+   `key-id.txt` exist, and that no `*.key` file is tracked (`git ls-files | grep key`).
+2. Every other device needs the SAME key, copied once outside the repo: over SSH (`remote.py`, e.g.
+   read the key on the first device and write it to a temp file on the other) or by hand (USB, a
+   password manager). Then on that device: back up its vault, run
+   `python scripts/vault_sync.py --adopt-key <copied key file>` (re-encrypts its own items with the
+   shared key, keeps a backup of the old key) and delete the temp copy. Its existing items are kept
+   and merged.
+3. Sync on both. Items added on one device appear on the others; items removed on one are removed on
+   the others. A device with a different key prints "the shared vault uses another key" and changes
+   nothing until step 2 is done.
+Never print, log or paste the key or any secret; check results only by item labels
+(`browser_vault list` or `hermes vault list`).
 
 ### Optional: answer offline with a local model (Ollama)
 Without internet every cloud model fails, so Hermes cannot answer at all. Sync already keeps offline
@@ -428,6 +467,9 @@ downloads several GB and is much weaker than cloud models, especially with tools
   in "Testing" mode (refresh tokens of test apps expire after 7 days). Fix once, with the user: Google
   Cloud console > Google Auth Platform > Audience > "Publish app" (personal use needs no verification;
   Google shows an "unverified app" screen at login, which is expected). Then log in again on each device.
+- Vault sync merges by item id: items are only added or removed (Hermes has no "edit"); to change a
+  password, add the new item and remove the old one, and both changes reach every device. A device that
+  never synced before only adds, never removes (safe first run). Backups: `vault.json.enc.bak-sync`.
 - Copying `auth.json`/`.env` between devices is NOT supported: OAuth refresh tokens can rotate and
   break both devices. Log in on each device.
 - Phone: works if Hermes runs on it as a normal install (e.g. Termux on Android: `pkg install python git gh`,
@@ -440,6 +482,8 @@ downloads several GB and is much weaker than cloud models, especially with tools
 - `hermes cron list` shows `hermes-sync` with a recent "ok" run on every device.
 - Hand-off: write one message in `hermes` on device A, exit, open `hermes` on device B: the same
   conversation resumes there.
+- Vault sync (if enabled): `vault_sync.py` prints nothing on every device, and the vault item labels
+  are the same on all of them; `git ls-files` shows no `*.key`.
 - Offline model (if set up): `curl http://localhost:11434/v1/models` lists `hermes-local` on every
   device, and sync prints no "local model" warning.
 - Queue: `jobs.py add "<B>" "Run hostname and tell me the result"` on A, sync A, sync B, wait ~1 min,
@@ -458,6 +502,8 @@ In your private repo (`<repo>/hermes-sync/`):
 - `devices/<name>.json`: per device, the names of the AI providers, models, logins (names and
   ok/expired only), OS and network addresses. **No secrets, ever.**
 - `queue/`: requests between devices and their results.
+- `vault/` (only if you enable vault sync): your Hermes vault, **encrypted**. The key is only on your
+  devices, never in the repo.
 - branch `hermes-sessions`: the latest conversation of each device (one file per device, overwritten
   every time, no history).
 
@@ -484,6 +530,8 @@ job, and the shortcut in your shell profile.
 - "local model server ... is not running" / "local model ... is missing": the offline model is in your
   fallback chain but not ready on that device. Start Ollama (`ollama serve`) or pull the model and alias
   it (`ollama cp <model> hermes-local`).
+- "the shared vault uses another key": that device has its own vault key. Copy the key from a device
+  that already syncs (not through GitHub) and run `scripts/vault_sync.py --adopt-key <file>`.
 - Nothing syncs by itself: check that the Hermes gateway is running and that `hermes cron list` shows
   `hermes-sync`.
 - Windows, `hermes` shortcut not working: the PowerShell execution policy blocks profiles

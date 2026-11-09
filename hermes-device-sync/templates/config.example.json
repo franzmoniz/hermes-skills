@@ -1,5 +1,6 @@
 {
   "sessions_branch": "hermes-sessions",
+  "vault_sync": false,
   "fallback_providers": null,
   "summary": {
     "enabled": false,

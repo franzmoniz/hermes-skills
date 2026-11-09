@@ -56,6 +56,7 @@ def device():
 
 DEFAULT_CONFIG = {
     "sessions_branch": "hermes-sessions",
+    "vault_sync": False,                 # true = share the encrypted Hermes vault (key never in the repo)
     "fallback_providers": None,          # list of {"provider","model"} applied on every device; null = don't manage
     "summary": {"enabled": False, "provider": None, "model": None, "language": "English"},
     "queue": {"rules": "", "max_hours": 3},

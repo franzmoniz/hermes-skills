@@ -1,2 +1,5 @@
 __pycache__/
 *.pyc
+# never commit vault keys (vault_sync shares only the encrypted file)
+*.key
+vault.key

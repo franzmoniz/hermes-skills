@@ -1,13 +1,13 @@
 ---
 name: hermes-device-sync
 description: Link devices into one Hermes (sync, hand-off, queue).
-version: 0.4.0
+version: 0.5.0
 author: Francisco Moniz (franzmoniz), Hermes Agent
 license: MIT
 platforms: [windows, linux, macos]
 metadata:
   hermes:
-    tags: [sync, multi-device, github, handoff, fallback, tailscale, ssh, offline, ollama]
+    tags: [sync, multi-device, github, handoff, fallback, tailscale, ssh, offline, ollama, vault]
     related_skills: []
 ---
 
@@ -53,7 +53,8 @@ plain sentence.
 - `scripts/setup.py` installer for one device (idempotent). `scripts/sync.py` one sync round.
 - `scripts/turn_sync.py` run by the Hermes hook after every answer (background, no windows, no tokens).
 - `scripts/memory_sync.py`, `skills_sync.py`, `device_check.py` (AI setup + logins check), `jobs.py`
-  (queue), `handoff.py` (conversation, recap, activity log), `share.py` (files), `remote.py` (SSH), `common.py`. All stdlib Python; run them with the Python that runs Hermes.
+  (queue), `handoff.py` (conversation, recap, activity log), `share.py` (files), `remote.py` (SSH),
+  `vault_sync.py` (opt-in encrypted vault sync), `common.py`. All stdlib Python; run them with the Python that runs Hermes.
 - `templates/` shell wrappers, `config.example.json`, `windows-ssh-server.ps1`, `gitignore`.
 - `README.md` the human guide (show the user the relevant parts when they ask "what is this?").
 
@@ -124,6 +125,8 @@ Step 7 - Shared settings (`<clone>/hermes-sync/config.json`, applies to ALL devi
   user exits Hermes, so enable it only with a provider the user accepts (a free one if they want zero
   cost). Set `language` to the user's language.
 - `queue.rules`: extra rules for unattended requests (e.g. "never delete files outside ~/projects").
+- `vault_sync`: `true` shares the Hermes credential vault between devices, encrypted (see "Optional:
+  same vault on every device"). Default `false`; only enable it after the user agrees.
 Save, then `python <clone>/hermes-sync/scripts/sync.py`. Done when the sync prints no errors.
 
 Step 7b - Logins and access. The sync compares, by NAME only, everything each device is connected to:
@@ -171,6 +174,28 @@ Only if the user wants it (e.g. "from the laptop at school, do X on my desktop a
    the .ps1 with `-AuthorizeKey`). Sync again so addresses are fresh.
 4. Test from the controller: `remote.py check "<target>"` -> "online via ..."; then
    `echo 'hostname' | python scripts/remote.py run "<target>"`. Done when it prints the target's name.
+
+## Optional: same vault on every device (encrypted)
+Only if the user wants it (e.g. "when I save a login on the laptop, the desktop should have it too").
+The Hermes vault (`hermes vault`, `$HERMES_HOME/vault/`) is `vault.json.enc` (items encrypted with
+Fernet) plus `vault.key`. `scripts/vault_sync.py` puts ONLY the encrypted items in the repo
+(`<data dir>/vault/vault.json.enc`), encrypted with the same key; the key never goes to the repo
+(`templates/gitignore` ignores `*.key`). Explain this to the user and get a clear yes first: the
+encrypted file in a private repo is unreadable without the key, but it is still their credentials.
+1. On the first device: back up `$HERMES_HOME/vault/` (e.g. to `$HERMES_HOME/backups/vault-<date>`),
+   set `"vault_sync": true` in `config.json`, sync. Check `<data dir>/vault/vault.json.enc` and
+   `key-id.txt` exist, and that no `*.key` file is tracked (`git ls-files | grep key`).
+2. Every other device needs the SAME key, copied once outside the repo: over SSH (`remote.py`, e.g.
+   read the key on the first device and write it to a temp file on the other) or by hand (USB, a
+   password manager). Then on that device: back up its vault, run
+   `python scripts/vault_sync.py --adopt-key <copied key file>` (re-encrypts its own items with the
+   shared key, keeps a backup of the old key) and delete the temp copy. Its existing items are kept
+   and merged.
+3. Sync on both. Items added on one device appear on the others; items removed on one are removed on
+   the others. A device with a different key prints "the shared vault uses another key" and changes
+   nothing until step 2 is done.
+Never print, log or paste the key or any secret; check results only by item labels
+(`browser_vault list` or `hermes vault list`).
 
 ## Optional: answer offline with a local model (Ollama)
 Without internet every cloud model fails, so Hermes cannot answer at all. Sync already keeps offline
@@ -261,6 +286,9 @@ downloads several GB and is much weaker than cloud models, especially with tools
   in "Testing" mode (refresh tokens of test apps expire after 7 days). Fix once, with the user: Google
   Cloud console > Google Auth Platform > Audience > "Publish app" (personal use needs no verification;
   Google shows an "unverified app" screen at login, which is expected). Then log in again on each device.
+- Vault sync merges by item id: items are only added or removed (Hermes has no "edit"); to change a
+  password, add the new item and remove the old one, and both changes reach every device. A device that
+  never synced before only adds, never removes (safe first run). Backups: `vault.json.enc.bak-sync`.
 - Copying `auth.json`/`.env` between devices is NOT supported: OAuth refresh tokens can rotate and
   break both devices. Log in on each device.
 - Phone: works if Hermes runs on it as a normal install (e.g. Termux on Android: `pkg install python git gh`,
@@ -273,6 +301,8 @@ downloads several GB and is much weaker than cloud models, especially with tools
 - `hermes cron list` shows `hermes-sync` with a recent "ok" run on every device.
 - Hand-off: write one message in `hermes` on device A, exit, open `hermes` on device B: the same
   conversation resumes there.
+- Vault sync (if enabled): `vault_sync.py` prints nothing on every device, and the vault item labels
+  are the same on all of them; `git ls-files` shows no `*.key`.
 - Offline model (if set up): `curl http://localhost:11434/v1/models` lists `hermes-local` on every
   device, and sync prints no "local model" warning.
 - Queue: `jobs.py add "<B>" "Run hostname and tell me the result"` on A, sync A, sync B, wait ~1 min,
