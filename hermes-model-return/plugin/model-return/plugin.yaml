@@ -1,0 +1,6 @@
+name: model-return
+version: 1.0.0
+description: "Every prompt, climb back to the primary model (or the best fallback above the current one) as soon as it answers again. Never overrides a manual /model choice: instead reminds you every 5 prompts."
+author: "Francisco Moniz (@franzmoniz)"
+provides_hooks:
+  - pre_llm_call
