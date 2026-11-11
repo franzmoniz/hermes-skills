@@ -8,9 +8,9 @@ What it does (idempotent: safe to run again):
      later devices: use the copy that is already in the repo (--update-scripts to overwrite it)
   2. writes $HERMES_HOME/hermes-sync.json (this device's name and paths)
   3. writes the bootstrap $HERMES_HOME/scripts/hermes-sync.sh that the cron job runs
-  4. adds a `hermes` wrapper to your shell profile (PowerShell on Windows, bash/zsh elsewhere):
-     plain `hermes` = sync, resume the newest conversation from ANY device, sync again on exit;
-     `hermes-new` = normal Hermes without the wrapper
+  4. plugs into the shared `hermes` launcher in your shell profile (PowerShell on Windows, bash/zsh
+     elsewhere): plain `hermes` = sync (+ one Hermes at a time) before Hermes opens and after it closes.
+     Continuing the same conversation with a recap is the separate skill Hermes's Terminal.
   5. installs a Hermes hook that syncs seconds after EVERY answer (close the terminal any time), and
      the cron job "hermes-sync" (every 15 min, no agent, zero tokens) as a safety net and for the queue
   6. runs the first sync and prints what differs from your other devices
@@ -48,7 +48,7 @@ def install_data(repo, subdir, update):
         say(("created " if first else "updated scripts in ") + str(data))
     if not (data / "config.json").exists():
         shutil.copy2(PKG / "templates" / "config.example.json", data / "config.json")
-        say("created config.json (shared settings; edit it to manage the fallback chain and the recap)")
+        say("created config.json (shared settings; edit it to manage the fallback chain and the language)")
     if not (data / ".gitignore").exists():
         shutil.copy2(PKG / "templates" / "gitignore", data / ".gitignore")
     ga = repo / ".gitattributes"
@@ -91,16 +91,22 @@ echo "hermes-sync: no python found on $(hostname)"; exit 1
     say(f"wrote {sd / 'hermes-sync.sh'}")
 
 
-def _replace_block(path, block):
+LAUNCHER = ("# >>> hermes-launcher >>>", "# <<< hermes-launcher <<<")
+
+
+def _replace_block(path, block, begin=BEGIN, end=END):
     path.parent.mkdir(parents=True, exist_ok=True)
     cur = path.read_text(encoding="utf-8-sig") if path.exists() else ""
+    full = f"{begin}\n{block.strip()}\n{end}"
+    pat = re.compile(re.escape(begin) + r".*?" + re.escape(end) + r"\r?\n?", re.S)
+    m = pat.search(cur)
+    if m and m.group(0).strip() == full:
+        return
     if path.exists():
         shutil.copy2(path, path.with_name(path.name + ".bak-" + time.strftime("%Y%m%d%H%M")))
-    pat = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\r?\n?", re.S)
-    new = pat.sub("", cur).rstrip()
-    new = (new + "\n\n" if new else "") + block + "\n"
+    new = pat.sub(lambda _: full + "\n", cur, count=1) if m else (cur.rstrip() + "\n\n" if cur.strip() else "") + full + "\n"
     path.write_text(new, encoding="utf-8")
-    say(f"added the `hermes` wrapper to {path}")
+    say(f"updated {begin.strip('# >')} in {path}")
 
 
 def install_shell(data):
@@ -115,7 +121,8 @@ def install_shell(data):
         if shutil.which("pwsh") or (docs / "PowerShell").exists():
             targets.append(docs / "PowerShell" / "Microsoft.PowerShell_profile.ps1")
         for t in targets:
-            _replace_block(t, f"{BEGIN}\n{block.strip()}\n{END}")
+            _replace_block(t, (tpl / "launcher.ps1").read_text(encoding="utf-8"), *LAUNCHER)
+            _replace_block(t, block)
         pol = subprocess.run(["powershell", "-NoProfile", "-Command", "Get-ExecutionPolicy"],
                              capture_output=True, text=True).stdout.strip()
         if pol in ("Restricted", "AllSigned", "Undefined"):
@@ -126,7 +133,8 @@ def install_shell(data):
         block = block.replace("__SCRIPTS__", str(data / "scripts")).replace("__PYTHON__", sys.executable)
         rcs = [p for p in (Path.home() / ".bashrc", Path.home() / ".zshrc") if p.exists()] or [Path.home() / ".bashrc"]
         for rc in rcs:
-            _replace_block(rc, f"{BEGIN}\n{block.strip()}\n{END}")
+            _replace_block(rc, (tpl / "launcher.sh").read_text(encoding="utf-8"), *LAUNCHER)
+            _replace_block(rc, block)
 
 
 HOOK_EVENT = "post_llm_call"

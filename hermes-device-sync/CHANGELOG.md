@@ -2,6 +2,19 @@
 
 Format: one section per version, newest first. Groups: Added, Changed, Fixed, Removed.
 
+## 0.7.0 - 2026-11-11
+### Changed
+- The sync is now only the sync. "`hermes` always continues the same conversation, with a recap" moved
+  to its own skill, **Hermes's Terminal** (folder `hermes-terminal`), so people with one device can
+  use it too. After this update `hermes` still syncs, but opens a new conversation unless you install
+  Hermes's Terminal: install it to keep continuing the same conversation (the two combine by themselves,
+  and it takes over your recap settings).
+- `hermes` is now a shared launcher that several skills plug into (block `hermes-launcher` in your
+  shell profile); the sync adds its steps before Hermes opens and after it closes.
+### Removed
+- The recap settings (`summary` in config.json) and `handoff.py summarize/prepare`: now in Hermes's Terminal.
+  New setting `language` for the sync's own messages.
+
 ## 0.6.0 - 2026-11-11
 ### Added
 - One Hermes at a time: when you type `hermes` and Hermes is already open on another of your devices,

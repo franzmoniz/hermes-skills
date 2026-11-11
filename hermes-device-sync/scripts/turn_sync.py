@@ -4,10 +4,10 @@ and the memory reach the other devices seconds after the answer, without waiting
 
   turn_sync.py            (called by the hook) starts the work in the background and returns at once,
                           so the answer is never delayed
-  turn_sync.py --child    (internal) waits for the answer to be stored, writes the recap (if enabled)
+  turn_sync.py --child    (internal) waits for the answer to be stored, refreshes the Hermes's Terminal recap (if that skill is installed)
                           and the activity-log line, then runs one sync. If more answers arrive
                           meanwhile, it loops until everything is saved. No model tokens unless the
-                          optional recap is enabled.
+                          Hermes's Terminal recap is enabled.
 """
 import os, subprocess, sys, time
 from pathlib import Path
@@ -49,9 +49,10 @@ def child():
             PENDING.unlink(missing_ok=True)
             time.sleep(6)  # let Hermes store the final answer
             LOCK.touch()
-            for fn in (handoff.summarize, handoff.activity):
+            term = handoff.terminal()  # Hermes's Terminal installed: refresh its recap first
+            for fn in ((lambda: term.summarize(term.current())) if term else None, handoff.activity):
                 try:
-                    fn()
+                    fn and fn()
                 except Exception:
                     pass
             sync.main()

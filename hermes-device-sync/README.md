@@ -1,7 +1,7 @@
 # Hermes Device Sync - One Hermes on all your devices
 
 **Author:** Francisco Moniz ([@franzmoniz](https://github.com/franzmoniz))
-**License:** MIT  -  **Version:** 0.6.0
+**License:** MIT  -  **Version:** 0.7.0
 
 ## What it does
 
@@ -10,9 +10,10 @@ phone) so they work as **one Hermes**:
 
 1. **Shared memory and skills**: what you teach Hermes on one device, and the skills it learns, every
    device knows.
-2. **Your conversation follows you**: close Hermes on the laptop, open it on the desktop, and the same
-   conversation continues there, with a short recap of where you stopped (the recap is optional).
-   Everything is saved seconds after **every** answer, so you can close the terminal at any moment
+2. **Your conversation goes with you**: your newest conversation is copied to your other devices.
+   Add the separate skill [Hermes's Terminal](../hermes-terminal) and it simply continues there when you
+   type `hermes`, with a short recap of where you stopped (the two skills combine by themselves; each
+   one also works alone). Everything is saved seconds after **every** answer, so you can close the terminal at any moment
    (even Alt+F4) and nothing is lost.
 3. **Same setup and logins everywhere**: it checks that every device has the same AI accounts, main
    model, fallback models and logins (Google accounts, API keys, MCP servers), tells you exactly what
@@ -61,7 +62,7 @@ With this installed:
 | Closing the terminal can lose the last messages | Saved seconds after every answer |
 | A login works on one device and is missing or expired on another | Every sync tells you, and your Hermes fixes it with you |
 | Files stay on the device where they are | Share them through a drive or your private repo |
-| A conversation stays on the device where it started | Type `hermes` on any device and the newest conversation from ANY device continues there, with a 3-line recap of where you stopped (the recap is optional) |
+| A conversation stays on the device where it started | Your newest conversation is copied to every device (with Hermes's Terminal it continues there by itself, with a recap) |
 | You don't notice a device missing an AI account or using another model | Every sync compares the devices and tells you exactly what is missing ("Desktop is missing AI accounts that Laptop has: copilot") |
 | You set the fallback models on every device by hand | Change the fallback chain once and every device applies it |
 | A login saved in the Hermes vault exists only on that device | Optionally the vault is the same on every device (encrypted; the key never leaves your devices) |
@@ -69,8 +70,8 @@ With this installed:
 | A device that is off can't do anything for you | Leave it a request. It runs as soon as that device is switched on, and the result comes back to you |
 | No way to reach your home PC from outside | Optional: control one device from another, at home or anywhere through Tailscale |
 
-The sync itself uses **no AI tokens**. It is plain git. Only the things you ask for (queued requests,
-and the optional recap) use a model, and you choose which one.
+The sync itself uses **no AI tokens**. It is plain git. Only the things you ask for (queued requests)
+use a model, and you choose which one.
 
 ## What you need
 
@@ -110,8 +111,7 @@ what is missing, so nothing is installed twice.
    - choose a name for your private sync repository (default `hermes-sync`);
    - on Windows, say yes if Hermes asks to allow PowerShell profile scripts (needed for the `hermes`
      shortcut);
-   - choose your fallback models (what to use when your main model fails or runs out) and whether you
-     want the conversation recap.
+   - choose your fallback models (what to use when your main model fails or runs out).
 
 ### Adding another device (any number of them)
 
@@ -198,8 +198,8 @@ Your Hermes follows `SKILL.md` step by step. In short:
      of the old file;
    - runs the first sync.
 7. **Makes sure the Hermes gateway runs**, because the cron job needs it (`hermes gateway install`).
-8. **Sets shared settings** in `<repo>/hermes-sync/config.json` with you: fallback chain, recap
-   (provider and language), rules for unattended requests.
+8. **Sets shared settings** in `<repo>/hermes-sync/config.json` with you: fallback chain, language,
+   rules for unattended requests.
 9. **On each extra device** it repeats the tools, GitHub login, clone and setup steps, then logs you in
    to every AI provider and service the other devices have (Google accounts, API keys, MCP servers),
    each with its own login on this device, until the sync shows no differences.
@@ -227,7 +227,7 @@ will happen, or do it yourself. "You" below means the Hermes agent; "the user" m
    devices: copied OAuth tokens get revoked within days (Google, Anthropic...) and can break BOTH devices.
 2. Never type or store passwords yourself; the user completes logins in the browser (device codes).
 3. Never add a paid model/API or enable anything that can bill the user without asking. Ask how they pay
-   for AI (subscriptions, free tiers, pay-per-token) before proposing a fallback chain or the recap.
+   for AI (subscriptions, free tiers, pay-per-token) before proposing a fallback chain.
 4. Back up any file you change outside the repo (`<file>.bak-YYYYMMDDHHMM`); setup.py already does this.
 5. Ask before system-level changes (PowerShell execution policy, SSH server, firewall, Tailscale).
 6. If a device is in someone else's network (e.g. a work/team Tailscale), never touch other people's
@@ -239,7 +239,7 @@ will happen, or do it yourself. "You" below means the Hermes agent; "the user" m
 - `scripts/setup.py` installer for one device (idempotent). `scripts/sync.py` one sync round.
 - `scripts/turn_sync.py` run by the Hermes hook after every answer (background, no windows, no tokens).
 - `scripts/memory_sync.py`, `skills_sync.py`, `device_check.py` (AI setup + logins check), `jobs.py`
-  (queue), `handoff.py` (conversation, recap, activity log), `share.py` (files), `remote.py` (SSH), `presence.py` (one Hermes at a time),
+  (queue), `handoff.py` (copies the conversation, activity log), `share.py` (files), `remote.py` (SSH), `presence.py` (one Hermes at a time),
   `vault_sync.py` (opt-in encrypted vault sync), `common.py`. All stdlib Python; run them with the Python that runs Hermes.
 - `templates/` shell wrappers, `config.example.json`, `windows-ssh-server.ps1`, `gitignore`.
 - `README.md` the human guide (show the user the relevant parts when they ask "what is this?").
@@ -307,9 +307,8 @@ Step 7 - Shared settings (`<clone>/hermes-sync/config.json`, applies to ALL devi
   (an entry may also have `"base_url"`, for a local/custom endpoint such as Ollama; never put keys here).
   Build it only from providers the user has (`hermes auth list`) and is happy to use (rule 3). Leave
   `null` to not manage it. When set, every device applies it on its next sync (with a config backup).
-- `summary`: 3-line recap shown above a resumed conversation. Costs a small model call each time the
-  user exits Hermes, so enable it only with a provider the user accepts (a free one if they want zero
-  cost). Set `language` to the user's language.
+- `language`: language of the messages the sync shows (e.g. "Português"). The recap of the conversation
+  is not part of this skill any more: it belongs to the separate skill Hermes's Terminal.
 - `queue.rules`: extra rules for unattended requests (e.g. "never delete files outside ~/projects").
 - `vault_sync`: `true` shares the Hermes credential vault between devices, encrypted (see "Optional:
   same vault on every device"). Default `false`; only enable it after the user agrees.
@@ -437,8 +436,14 @@ downloads several GB and is much weaker than cloud models, especially with tools
 - Skills: skills the user creates on any device (`skill_manage`) reach all devices on the next sync.
   Bundled and hub-installed skills are not copied (each Hermes manages those); if a device lacks a hub
   skill the other has, install it there with `hermes skills install`.
-- The user opens Hermes by typing `hermes` with no arguments: it syncs, resumes the newest conversation
-  from any device, and syncs again on exit. `hermes-new` = a fresh Hermes without that.
+- The user opens Hermes by typing `hermes` with no arguments: it syncs (and imports a newer conversation
+  from another device), and syncs again on exit. `hermes-new` = plain Hermes without that.
+- Same conversation everywhere: this skill only COPIES the conversation between devices. Continuing it
+  automatically, with a recap, is the separate skill Hermes's Terminal (folder `hermes-terminal`). If both
+  are installed they combine by themselves: the conversation "Hermes's Terminal" follows the user from
+  device to device, recap included. Never install one as a requirement of the other; offer it.
+- Both plug into the shared `hermes` launcher (block `hermes-launcher` in the shell profile, the same code
+  in every skill that uses it) through steps: this skill adds `before-20-sync` / `after-80-sync`.
 - One Hermes at a time: before opening, the `hermes` wrapper runs `presence.py start`. If another
   device has Hermes open it asks: 1 = close Hermes on that device and use it here (over SSH; that
   device saves and syncs its conversation first, then this one resumes it), 2 = close this terminal.
@@ -457,8 +462,8 @@ downloads several GB and is much weaker than cloud models, especially with tools
   stays in Hermes' local database with the time of every message, the activity line is written at the
   time the conversation HAPPENED (not when it is synced), and every sync commits locally and quietly
   skips the push. When the device is online again, the next sync pushes it all, merges the activity
-  logs of both devices without conflicts (git `merge=union` + tidy/sort), and makes the recaps that were
-  left "(recap pending)". Nothing extra to clean up: there is no separate offline folder.
+  logs of both devices without conflicts (git `merge=union` + tidy/sort). Nothing extra to clean up:
+  there is no separate offline folder.
 - Saving happens after EVERY answer (hook `post_llm_call` -> `turn_sync.py`, seconds later); the
   15-min cron job is only a safety net and runs the queue while nobody chats. An answer cut off
   mid-way (terminal closed while it was still writing) is not saved; everything before it is.
@@ -496,8 +501,8 @@ downloads several GB and is much weaker than cloud models, especially with tools
 - `python scripts/sync.py` prints nothing (or only expected lines) on every device.
 - `devices/` has one JSON per device with the same `providers`, `model` and `fallback`.
 - `hermes cron list` shows `hermes-sync` with a recent "ok" run on every device.
-- Hand-off: write one message in `hermes` on device A, exit, open `hermes` on device B: the same
-  conversation resumes there.
+- Hand-off: write one message in `hermes` on device A, exit, sync B: `hermes sessions list` on B shows
+  it. With Hermes's Terminal on both: open `hermes` on B and the same conversation continues there.
 - Vault sync (if enabled): `vault_sync.py` prints nothing on every device, and the vault item labels
   are the same on all of them; `git ls-files` shows no `*.key`.
 - Offline model (if set up): `curl http://localhost:11434/v1/models` lists `hermes-local` on every
@@ -533,8 +538,6 @@ job, and the shortcut in your shell profile.
 - Sync, memory merge, device check and conversation hand-off: **zero tokens**.
 - Queued requests: run with your normal Hermes model chain, like any message you send.
 - Local offline model (optional): free, runs on your own device; only disk space and electricity.
-- Recap: one small model call each time you exit Hermes, and **only if you enable it**. Use a free
-  model if you want zero cost.
 
 ## Troubleshooting
 

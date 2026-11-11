@@ -2,14 +2,9 @@
   "sessions_branch": "hermes-sessions",
   "vault_sync": false,
   "fallback_providers": null,
-  "summary": {
-    "enabled": false,
-    "provider": null,
-    "model": null,
-    "language": "English"
-  },
   "queue": {
     "rules": "",
     "max_hours": 3
-  }
+  },
+  "language": "English"
 }

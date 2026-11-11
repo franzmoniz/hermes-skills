@@ -1,6 +1,6 @@
 {
   "hermes-device-sync": {
-    "version": "0.6.0"
+    "version": "0.7.0"
   },
   "hermes-model-return": {
     "version": "1.0.0"
@@ -9,6 +9,9 @@
     "version": "0.1.0"
   },
   "hermes-skills-updater": {
+    "version": "0.1.0"
+  },
+  "hermes-terminal": {
     "version": "0.1.0"
   }
 }

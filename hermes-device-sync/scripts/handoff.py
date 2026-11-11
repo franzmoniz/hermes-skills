@@ -1,11 +1,13 @@
 """Moves your newest Hermes conversation between devices through the sync repo.
 
   python handoff.py export      export this device's newest conversation (sync runs this)
-  python handoff.py pick        if another device has a newer conversation, import it and
-                                print its session id (the `hermes` wrapper then resumes it)
-  python handoff.py summarize   write a 3-line recap of the newest conversation (optional, see config)
-  python handoff.py prepare <id> put that recap in the "Previous Conversation" panel of Hermes
+  python handoff.py pick        if another device has a newer conversation, import it and print its
+                                session id (run by the `hermes` launcher before Hermes opens)
   python handoff.py activity    update this conversation's line in the activity log (activity.md)
+
+Which conversation: with the skill Hermes's Terminal installed, the conversation "Hermes's Terminal"
+(an imported one is handed to it with `terminal.py adopt`, so `hermes` continues it, recap included).
+Without it, the newest terminal conversation (it then shows up in /resume on the other device).
 
 Conversations live on a separate branch (config "sessions_branch"), one file per device, always
 replaced (the branch is rewritten without history, so it never grows). Export only happens when
@@ -13,7 +15,7 @@ the last answer has finished. Export/import use no model (zero tokens); only the
 Relies on Hermes internals (state.db, `hermes sessions export/import`): if a Hermes update breaks
 them, the sync keeps working and only the hand-off is skipped (an error line is printed).
 """
-import json, os, re, shutil, sqlite3, subprocess, sys, tempfile, time
+import importlib.util, json, os, re, shutil, sqlite3, subprocess, sys, tempfile, time
 from common import HH, device, shared_cfg, git, hermes_bin, out, read_json, write_json
 from jobs import QUEUE_PREFIX
 
@@ -23,7 +25,7 @@ BRANCH = shared_cfg().get("sessions_branch") or "hermes-sessions"
 
 def load_state():
     s = read_json(STATE, None) or {}
-    for k in ("exported", "imported", "sessions", "summaries"):
+    for k in ("exported", "imported", "sessions"):
         s.setdefault(k, {})
     return s
 
@@ -44,11 +46,39 @@ def db():
     return sqlite3.connect("file:" + str(HH / "state.db") + "?mode=ro", uri=True, timeout=10)
 
 
+def terminal():
+    """The Hermes's Terminal module when that skill is installed on this device, else None."""
+    script = (read_json(HH / "hermes-terminal.json", {}) or {}).get("script")
+    if not script or not os.path.exists(script):
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location("hermes_terminal", script)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:
+        return None
+
+
+def terminal_recap(sid):
+    t = terminal()
+    return t.state()["summaries"].get(sid, {}).get("text", "") if t and sid else ""
+
+
 def latest_session():
-    """(id, last_ts, last_role, last_content, last_tool_calls) of the newest local CLI conversation."""
+    """(id, last_ts, last_role, last_content, last_tool_calls) of the conversation to move between devices:
+    "Hermes's Terminal" when that skill is installed, else the newest local CLI conversation."""
     if not (HH / "state.db").exists():
         return None  # no conversations on this device yet
     c = db()
+    t = terminal()
+    sid = t.current() if t else None
+    if sid:
+        ts = c.execute("SELECT MAX(timestamp) FROM messages WHERE session_id=?", (sid,)).fetchone()[0]
+        if ts is not None:
+            last = c.execute("SELECT role, content, tool_calls FROM messages WHERE session_id=? "
+                             "ORDER BY timestamp DESC, id DESC LIMIT 1", (sid,)).fetchone()
+            return (sid, ts) + tuple(last)
     row = c.execute(
         "SELECT s.id, MAX(m.timestamp) t FROM sessions s JOIN messages m ON m.session_id = s.id "
         "WHERE s.source IN ('local','cli') AND COALESCE(s.created_source,'cli') != 'desktop' "
@@ -76,7 +106,7 @@ def export():
     if role != "assistant" or not (content or "").strip() or tool_calls:
         return  # the answer is not finished yet: next round
     st = load_state()
-    summ = st["summaries"].get(sid, {}).get("text", "")
+    summ = terminal_recap(sid)
     if st["exported"].get(sid) == ts and st.get("exported_summary", "") == summ:
         return
     ts, untouched_import = effective_ts(st, sid, ts)
@@ -191,90 +221,22 @@ def pick():
             return
         st["imported"][best["device"]] = best["last_ts"]
         st["sessions"][m.group(1)] = {"src_ts": best["last_ts"], "at": time.time(), "from": best["device"]}
-        if best.get("summary"):
-            st["summaries"][m.group(1)] = {"ts": time.time(), "text": best["summary"]}
         save_state(st)
+        t = terminal()
+        if t:  # Hermes's Terminal installed: this becomes "Hermes's Terminal" here, with the other device's recap
+            sf = os.path.join(tmp, "recap.txt")
+            open(sf, "w", encoding="utf-8").write(best.get("summary") or "")
+            t.adopt(m.group(1), sf)
         print(m.group(1))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-# ---------- optional 3-line recap for the "Previous Conversation" panel ----------
-
-def _hermes_imports():
-    """Puts the Hermes code and its Python environment on sys.path (to use its auxiliary LLM client)."""
-    import glob
-    agent_dir = str(HH / "hermes-agent")
-    if agent_dir not in sys.path:
-        sys.path.insert(0, agent_dir)
-    for f in glob.glob(str(HH / "installs" / "*" / "facts.json")):
-        try:
-            env = json.load(open(f, encoding="utf-8"))["packages"]["venv"]["environment"]
-        except Exception:
-            continue
-        for sp in (os.path.join(env, "Lib", "site-packages"), *glob.glob(os.path.join(env, "lib", "python3*", "site-packages"))):
-            if os.path.isdir(sp) and sp not in sys.path:
-                sys.path.insert(1, sp)
-    os.environ.setdefault("HERMES_HOME", str(HH))
-
-
-def summarize(sid=None):
-    """Recap of the newest conversation (or of `sid`). Offline it fails silently; catchup() retries later."""
-    cfg = shared_cfg()["summary"]
-    if not cfg.get("enabled") or not cfg.get("provider"):
-        return
-    if sid:
-        row = db().execute("SELECT MAX(timestamp) FROM messages WHERE session_id=?", (sid,)).fetchone()
-        if not row or row[0] is None:
-            return
-        ts = row[0]
-    else:
-        s = latest_session()
-        if not s:
-            return
-        sid, ts = s[0], s[1]
-    st = load_state()
-    if st["summaries"].get(sid, {}).get("ts", 0) >= ts:
-        return
-    rows = db().execute("SELECT role, content, tool_calls FROM messages WHERE session_id=? AND role IN ('user','assistant') "
-                        "ORDER BY timestamp, id", (sid,)).fetchall()
-    msgs = [(r, clean(t)) for r, t, tc in rows if (t or "").strip() and not (r == "assistant" and tc)]
-    msgs = [m for m in msgs if m[1]][-14:]
-    if not msgs:
-        return
-    conv = "\n\n".join(("USER: " if r == "user" else "HERMES: ") + t[:1500] for r, t in msgs)
-    prompt = (f"Summarize in {cfg.get('language') or 'English'}, in at most 3 short lines (about 90 characters each), "
-              "what this conversation between the user and the Hermes assistant is about and where it stopped, "
-              "so the user remembers when resuming. No markdown, no introduction, one idea per line.")
-    _hermes_imports()
-    import io, contextlib, logging
-    logging.disable(logging.WARNING)
-    try:
-        from agent.auxiliary_client import call_llm
-        with contextlib.redirect_stderr(io.StringIO()):
-            r = call_llm(provider=cfg["provider"], model=cfg.get("model") or None,
-                         messages=[{"role": "system", "content": prompt}, {"role": "user", "content": conv}],
-                         max_tokens=1000, temperature=None, timeout=60, reasoning_config={"enabled": False})
-        text = (r.choices[0].message.content or "").strip()
-    except Exception:
-        text = ""
-    if not text:
-        return
-    st["summaries"][sid] = {"ts": ts, "text": "\n".join([l.strip(" -*\t") for l in text.splitlines() if l.strip()][:3])}
-    save_state(st)
-
-
-MARK = "# Generated by hermes-device-sync (recap of the last conversation). Do not edit."
-
-
-PENDING_RECAPS = HH / "cache" / "hermes-sync-pending-recaps.json"
-
-
 def activity(sid=None):
     """Activity log <data dir>/activity.md: ONE line per conversation, placed by the time the conversation
     happened (so work done offline days ago lands days back), replaced on every answer, never one line per
-    message. Text = the recap if enabled, else the conversation title, else the first request. If the recap
-    is enabled but could not be made (offline), the line says "(recap pending)" and catchup() fixes it."""
+    message. Text = the Hermes's Terminal recap if there is one, else the conversation title, else the
+    first request."""
     from common import data_dir
     import timeline
     if not (HH / "state.db").exists():
@@ -289,11 +251,8 @@ def activity(sid=None):
     if not row or row[0] is None:
         return
     ts = row[0]
-    pend = read_json(PENDING_RECAPS, {})
-    text = load_state()["summaries"].get(sid, {}).get("text", "").strip()
-    if text:
-        pend.pop(sid, None)
-    else:
+    text = terminal_recap(sid).strip()
+    if not text:
         r = c.execute("SELECT title FROM sessions WHERE id=?", (sid,)).fetchone()
         text = (r[0] if r and r[0] else "") or ""
         if not text:
@@ -301,11 +260,6 @@ def activity(sid=None):
                           (sid,)).fetchone()
             text = " ".join(clean(f[0] if f else "").split())[:160]
         text = text or "conversation"
-        cfg = shared_cfg()["summary"]
-        if cfg.get("enabled") and cfg.get("provider"):
-            text += " (recap pending)"
-            pend[sid] = ts
-    write_json(PENDING_RECAPS, pend)
     text = " ".join(l.strip().rstrip(".") + "." for l in text.splitlines() if l.strip())
     mark = f"<!-- session:{sid} -->"
     p = data_dir() / "activity.md"
@@ -317,44 +271,23 @@ def activity(sid=None):
 
 def catchup():
     """Run by sync after a successful pull (= online): tidy the activity log after merges (duplicates out,
-    sorted by date) and make the recaps that were left pending while offline."""
+    sorted by date); with Hermes's Terminal, refresh the line once a recap left pending offline exists."""
     from common import data_dir
     import timeline
     timeline.normalize(data_dir() / "activity.md")
-    for sid in list(read_json(PENDING_RECAPS, {})):
+    t = terminal()
+    if t and t.current():
         try:
-            summarize(sid)
-            activity(sid)
+            t.summarize(t.current())
+            activity(t.current())
         except Exception:
             pass
 
 
-def prepare(sid=""):
-    """Writes the recap into the Hermes locale overlay key cli.resume.earlier_messages (shown above the
-    resumed conversation). Never touches an en.yaml overlay that hermes-device-sync did not create."""
-    path = HH / "locales" / "en.yaml"
-    if path.exists() and not path.read_text(encoding="utf-8").startswith(MARK):
-        return
-    if not sid:
-        s = latest_session()
-        sid = s[0] if s else ""
-    summ = load_state()["summaries"].get(sid, {}).get("text", "")
-    if not summ:
-        if path.exists():
-            path.unlink()
-        return
-    body = "Recap:\n" + "\n".join("    " + l.replace("{", "{{").replace("}", "}}") for l in summ.splitlines())
-    body += "\n\n  ... {count} earlier messages ..."
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(MARK + "\ncli:\n  resume:\n    earlier_messages: " + json.dumps(body, ensure_ascii=False) + "\n",
-                    encoding="utf-8")
-
-
 if __name__ == "__main__":
     cmd, args = (sys.argv[1] if len(sys.argv) > 1 else ""), sys.argv[2:]
-    fn = {"export": export, "pick": pick, "summarize": summarize, "prepare": prepare, "activity": activity,
-          "catchup": catchup}.get(cmd)
+    fn = {"export": export, "pick": pick, "activity": activity, "catchup": catchup}.get(cmd)
     if not fn:
         print(__doc__)
         sys.exit(1)
-    fn(*args[:1]) if cmd == "prepare" else fn()
+    fn()

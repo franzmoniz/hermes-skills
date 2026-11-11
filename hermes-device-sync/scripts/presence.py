@@ -57,7 +57,8 @@ MSG = {
 
 
 def T(key, **kw):
-    lang = str((shared_cfg().get("summary") or {}).get("language") or shared_cfg().get("language") or "English").lower()
+    c = shared_cfg()  # "summary.language" = setting of versions before 0.7.0
+    lang = str((c.get("summary") or {}).get("language") if c.get("language") in (None, "English") and c.get("summary") else c.get("language") or "English").lower()
     return MSG["pt" if lang.startswith(("pt", "portug")) else "en"][key].format(**kw)
 
 

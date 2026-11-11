@@ -16,4 +16,8 @@ if cfg and cfg.get("repo") and cfg.get("device"):
                         "--device", cfg["device"], "--subdir", data.name, "--update-scripts"],
                        capture_output=True, text=True)
     print("\n".join(l for l in r.stdout.splitlines() if l.strip())[-1500:])
+    if not (HH / "hermes-terminal.json").exists():
+        print("hermes-device-sync 0.7.0: continuing the same conversation with a recap is now the separate skill "
+              "Hermes's Terminal. Without it, `hermes` opens a new conversation. Ask the user if they want it: "
+              "https://github.com/franzmoniz/hermes-skills/tree/main/hermes-terminal")
     sys.exit(r.returncode)
