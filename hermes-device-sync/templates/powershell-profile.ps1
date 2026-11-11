@@ -8,11 +8,17 @@ function hermes {
     $exe = (Get-Command hermes -CommandType Application | Select-Object -First 1).Source
     if ($args.Count -gt 0) { & $exe @args; return }
     $h = Join-Path $HermesSyncScripts 'handoff.py'
+    $p = Join-Path $HermesSyncScripts 'presence.py'
     Sync-Hermes
+    # One Hermes at a time: if another device has Hermes open, ask (close it there / stop here).
+    $env:HERMES_SYNC_WRAPPER_PID = $PID
+    & $HermesSyncPython $p start
+    if ($LASTEXITCODE -eq 3) { Write-Host 'OK, continua no outro dispositivo.'; exit }
     $id = (& $HermesSyncPython $h pick 2>$null | Select-Object -Last 1)
     & $HermesSyncPython $h prepare $id 2>$null
     if ($id) { & $exe --resume $id } else { & $exe -c }
     Write-Host 'Saving the conversation (recap + sync)...' -ForegroundColor DarkGray
+    & $HermesSyncPython $p stop 2>$null
     & $HermesSyncPython $h summarize 2>$null
     Sync-Hermes
 }

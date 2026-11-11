@@ -1,7 +1,7 @@
 # Hermes Device Sync - One Hermes on all your devices
 
 **Author:** Francisco Moniz ([@franzmoniz](https://github.com/franzmoniz))
-**License:** MIT  -  **Version:** 0.5.0
+**License:** MIT  -  **Version:** 0.6.0
 
 ## What it does
 
@@ -158,6 +158,11 @@ the cloud models can't be reached. It is free but weaker than cloud models.
 
 - Type `hermes` (no arguments) to open Hermes. It syncs, continues your newest conversation from any
   device, and syncs again when you exit. Use `hermes-new` for a fresh, plain Hermes.
+- One Hermes at a time: if Hermes is already open on another of your devices, `hermes` tells you
+  ("Device Desktop has Hermes open") and asks: close it there and use it here, or close this terminal.
+  Closing it there needs remote control (below); without it you are told to close it yourself.
+  Before your Hermes opens Hermes on another device by itself (e.g. to run checks), it checks the
+  request queue and its rules first, then whether Hermes is open there, and asks you if it is.
 - Talk to Hermes normally. Useful requests:
   - "Leave this for the Desktop: update all my projects and tell me what changed." It runs when the
     Desktop is on. If remote control is set up and the Desktop is on, it starts right away.
@@ -234,7 +239,7 @@ will happen, or do it yourself. "You" below means the Hermes agent; "the user" m
 - `scripts/setup.py` installer for one device (idempotent). `scripts/sync.py` one sync round.
 - `scripts/turn_sync.py` run by the Hermes hook after every answer (background, no windows, no tokens).
 - `scripts/memory_sync.py`, `skills_sync.py`, `device_check.py` (AI setup + logins check), `jobs.py`
-  (queue), `handoff.py` (conversation, recap, activity log), `share.py` (files), `remote.py` (SSH),
+  (queue), `handoff.py` (conversation, recap, activity log), `share.py` (files), `remote.py` (SSH), `presence.py` (one Hermes at a time),
   `vault_sync.py` (opt-in encrypted vault sync), `common.py`. All stdlib Python; run them with the Python that runs Hermes.
 - `templates/` shell wrappers, `config.example.json`, `windows-ssh-server.ps1`, `gitignore`.
 - `README.md` the human guide (show the user the relevant parts when they ask "what is this?").
@@ -434,6 +439,17 @@ downloads several GB and is much weaker than cloud models, especially with tools
   skill the other has, install it there with `hermes skills install`.
 - The user opens Hermes by typing `hermes` with no arguments: it syncs, resumes the newest conversation
   from any device, and syncs again on exit. `hermes-new` = a fresh Hermes without that.
+- One Hermes at a time: before opening, the `hermes` wrapper runs `presence.py start`. If another
+  device has Hermes open it asks: 1 = close Hermes on that device and use it here (over SSH; that
+  device saves and syncs its conversation first, then this one resumes it), 2 = close this terminal.
+  If the other device can't be reached it says so and continues here. `presence.py status` shows
+  every device. Queued requests and `hermes-new` never count as "Hermes open".
+- BEFORE you open/run Hermes on another device yourself (remote checks, `remote.py run` that starts
+  Hermes, starting a queued request at once): run `python scripts/presence.py guard "<device>"`. It
+  checks the request queue and `queue.rules` first (a request already queued/running there = conflict),
+  then whether Hermes is open there. "free" -> go ahead. "busy: ..." -> do NOT start anything; ask the
+  user the same choice (close Hermes on <device> with `presence.py close "<device>"` and continue, or
+  leave it and do the work later/elsewhere).
 
 ### Pitfalls
 - Working offline (no internet): Hermes itself only answers offline with a LOCAL model (e.g. Ollama) in

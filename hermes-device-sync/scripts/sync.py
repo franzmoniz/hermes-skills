@@ -2,7 +2,8 @@
 $HERMES_HOME/scripts/hermes-sync.sh), and the `hermes` shell wrapper runs it before and after a chat.
 
   1. commit local changes in the sync repo, pull (rebase), 2. merge memory, your own skills and (opt-in) the encrypted vault,
-  3. check/align the AI setup of this device, 4. start queued requests for this device,
+  3. check/align the AI setup of this device, 4. start queued requests for this device and refresh
+     "Hermes is open here" (presence.py),
   5. export the newest conversation, 6. commit and push.
 Prints nothing when all is well (lines start with "hermes-sync:" otherwise). Uses no model tokens.
 """
@@ -82,7 +83,7 @@ def main():
                 return 0  # offline: everything stays in local commits and is pushed on the next online sync
             out(f"pull failed on {device()} (conflict or network): {e}")
             return 1
-        import memory_sync, device_check, jobs, handoff, skills_sync, vault_sync
+        import memory_sync, device_check, jobs, handoff, skills_sync, vault_sync, presence
         step("activity log catch-up", handoff.catchup)  # online again: tidy + recaps left pending offline
         step("memory sync", memory_sync.run)
         step("skills sync", lambda: [out(m) for m in skills_sync.run(
@@ -90,6 +91,7 @@ def main():
         step("vault sync", vault_sync.run)  # opt-in: "vault_sync": true in config.json
         step("device check", device_check.run)
         step("request queue", jobs.process)
+        step("presence", presence.heartbeat)  # Hermes open here? (one Hermes at a time)
         step("conversation export", handoff.export)
         step("activity log", handoff.activity)
         commit_all()

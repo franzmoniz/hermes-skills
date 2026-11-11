@@ -211,6 +211,8 @@ def _reach():
         "ssh_pubkey": pub.read_text(encoding="utf-8").strip() if pub.exists() else None,
         "bash": bash,
         "sync_script": str(HH / "scripts" / "hermes-sync.sh"),
+        "python": sys.executable,
+        "sync_scripts_dir": str(Path(__file__).resolve().parent),
     }
 
 

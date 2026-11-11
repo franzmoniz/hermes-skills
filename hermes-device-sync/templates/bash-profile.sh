@@ -7,11 +7,16 @@ sync-hermes() { "$HERMES_SYNC_PYTHON" "$HERMES_SYNC_SCRIPTS/sync.py"; }
 hermes() {
   if [ "$#" -gt 0 ]; then command hermes "$@"; return; fi
   _h="$HERMES_SYNC_SCRIPTS/handoff.py"
+  _p="$HERMES_SYNC_SCRIPTS/presence.py"
   sync-hermes
+  # One Hermes at a time: if another device has Hermes open, ask (close it there / stop here).
+  HERMES_SYNC_WRAPPER_PID=$$ "$HERMES_SYNC_PYTHON" "$_p" start
+  if [ $? -eq 3 ]; then echo "OK, continua no outro dispositivo."; exit; fi
   _id="$("$HERMES_SYNC_PYTHON" "$_h" pick 2>/dev/null | tail -n 1)"
   "$HERMES_SYNC_PYTHON" "$_h" prepare "$_id" 2>/dev/null
   if [ -n "$_id" ]; then command hermes --resume "$_id"; else command hermes -c; fi
   echo "Saving the conversation (recap + sync)..."
+  "$HERMES_SYNC_PYTHON" "$_p" stop 2>/dev/null
   "$HERMES_SYNC_PYTHON" "$_h" summarize 2>/dev/null
   sync-hermes
 }
