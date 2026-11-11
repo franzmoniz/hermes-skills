@@ -318,3 +318,6 @@ downloads several GB and is much weaker than cloud models, especially with tools
   device, and sync prints no "local model" warning.
 - Queue: `jobs.py add "<B>" "Run hostname and tell me the result"` on A, sync A, sync B, wait ~1 min,
   sync B, sync A: A prints "request to B done" and the result file has B's hostname.
+
+## Updates (last install step)
+If the skill `hermes-skills-updater` is not installed on this device yet, ask the user whether they want to be told about updates of this skill (and the others from this repository) when Hermes starts. If yes, install it from https://github.com/franzmoniz/hermes-skills (folder `hermes-skills-updater`, follow its SKILL.md). Never update a skill without the user's yes.

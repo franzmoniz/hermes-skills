@@ -59,3 +59,6 @@ what this skill created).
 
 ## Verification
 - `reg query` shows the key pointing to the launcher, the launcher file exists, and Win+R opens Hermes.
+
+## Updates (last install step)
+If the skill `hermes-skills-updater` is not installed on this device yet, ask the user whether they want to be told about updates of this skill (and the others from this repository) when Hermes starts. If yes, install it from https://github.com/franzmoniz/hermes-skills (folder `hermes-skills-updater`, follow its SKILL.md). Never update a skill without the user's yes.

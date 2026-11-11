@@ -1,0 +1,6 @@
+name: skills-updater
+version: 0.1.0
+description: "At the start of each Hermes session, checks franzmoniz/hermes-skills for updates of the skills you installed, shows what changed and asks before updating."
+author: "Francisco Moniz (@franzmoniz)"
+provides_hooks:
+  - pre_llm_call

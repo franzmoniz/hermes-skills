@@ -10,10 +10,13 @@ function hermes {
     $h = Join-Path $HermesSyncScripts 'handoff.py'
     $p = Join-Path $HermesSyncScripts 'presence.py'
     Sync-Hermes
+    # Hermes's Skills updates: ask before Hermes opens (if hermes-skills-updater is installed)
+    $u = Join-Path $(if ($env:HERMES_HOME) { $env:HERMES_HOME } else { Join-Path $env:LOCALAPPDATA 'hermes' }) 'scripts\hermes-skills-updater.py'
+    if (Test-Path $u) { & $HermesSyncPython $u prompt }
     # One Hermes at a time: if another device has Hermes open, ask (close it there / stop here).
     $env:HERMES_SYNC_WRAPPER_PID = $PID
     & $HermesSyncPython $p start
-    if ($LASTEXITCODE -eq 3) { Write-Host 'OK, continua no outro dispositivo.'; exit }
+    if ($LASTEXITCODE -eq 3) { Write-Host 'OK - keep using Hermes on the other device.'; exit }
     $id = (& $HermesSyncPython $h pick 2>$null | Select-Object -Last 1)
     & $HermesSyncPython $h prepare $id 2>$null
     if ($id) { & $exe --resume $id } else { & $exe -c }

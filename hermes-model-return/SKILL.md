@@ -45,3 +45,6 @@ plugin's `_probe(("provider", "model", "base_url"))`: it prints the provider's e
 - Do not test by running plugin code under a Python without Hermes' dependencies: Hermes relaunches
   itself and the test results are meaningless. Always `import hermes_bootstrap` first.
 - Uninstall: `hermes plugins disable model-return` and delete the folder.
+
+## Updates (last install step)
+If the skill `hermes-skills-updater` is not installed on this device yet, ask the user whether they want to be told about updates of this skill (and the others from this repository) when Hermes starts. If yes, install it from https://github.com/franzmoniz/hermes-skills (folder `hermes-skills-updater`, follow its SKILL.md). Never update a skill without the user's yes.

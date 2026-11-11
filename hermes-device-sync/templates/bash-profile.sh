@@ -9,9 +9,12 @@ hermes() {
   _h="$HERMES_SYNC_SCRIPTS/handoff.py"
   _p="$HERMES_SYNC_SCRIPTS/presence.py"
   sync-hermes
+  # Hermes's Skills updates: ask before Hermes opens (if hermes-skills-updater is installed)
+  _u="${HERMES_HOME:-$HOME/.hermes}/scripts/hermes-skills-updater.py"
+  [ -f "$_u" ] && "$HERMES_SYNC_PYTHON" "$_u" prompt
   # One Hermes at a time: if another device has Hermes open, ask (close it there / stop here).
   HERMES_SYNC_WRAPPER_PID=$$ "$HERMES_SYNC_PYTHON" "$_p" start
-  if [ $? -eq 3 ]; then echo "OK, continua no outro dispositivo."; exit; fi
+  if [ $? -eq 3 ]; then echo "OK - keep using Hermes on the other device."; exit; fi
   _id="$("$HERMES_SYNC_PYTHON" "$_h" pick 2>/dev/null | tail -n 1)"
   "$HERMES_SYNC_PYTHON" "$_h" prepare "$_id" 2>/dev/null
   if [ -n "$_id" ]; then command hermes --resume "$_id"; else command hermes -c; fi
